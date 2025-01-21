@@ -1,0 +1,39 @@
+[package]
+name = "finchboard_testing_suite"
+version = "1.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+argh = "0.1.10"
+simple_logger = "1.13.0"
+log = "0.4.14"
+structopt = "0.3.23"
+tokio = {version="1.12.0", features = ["full"]}
+thiserror = "1.0.30"
+futures = "0.3.17"
+
+sun-times = "0.2.0"
+chrono = "0.4.19"
+sun = "0.2.0"
+gpio-cdev = {version = "0.5.0", features = ["async-tokio"]}
+linux-embedded-hal-async = {path = './src/tripwire/linux-embedded-hal-async'}
+vl53l4cd = "0.4.0"
+i2cdev = "0.6.1"
+
+[[bin]]
+name = 'house-light'
+path = 'src/house-light/main.rs'
+
+[[bin]]
+name = 'peckboard'
+path = 'src/peckboard/main.rs'
+
+[[bin]]
+name = 'stepper-motor'
+path = 'src/stepper-motor/main.rs'
+
+[[bin]]
+name = 'tripwire'
+path = 'src/tripwire/main.rs'
