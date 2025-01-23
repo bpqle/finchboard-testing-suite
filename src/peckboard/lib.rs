@@ -4,9 +4,8 @@ use gpio_cdev::{Chip, AsyncLineEventHandle,
                 EventRequestFlags, EventType,
                 errors::Error as GpioError};
 use futures::stream::StreamExt;
-//use tokio::*;
 use thiserror;
-
+use log::info;
 
 struct PeckLEDs {
     right_leds: MultiLineHandle,
@@ -15,6 +14,7 @@ struct PeckLEDs {
     peck_position: Vec<LedState>,
 }
 struct PeckKeys {
+    interrupt_line: u32
 }
 pub struct PeckBoard {
     leds: PeckLEDs,
@@ -23,7 +23,6 @@ pub struct PeckBoard {
 
 impl PeckBoard {
     const INTERRUPT_CHIP: &'static str = "/dev/gpiochip2";
-    const INTERRUPT_LINE: u32 = 22;
     const PECK_KEY_LINES: [u32; 3] = [13,14,15];
 
     pub async fn new (chip: &str) -> Result<Self, Error> {
@@ -31,8 +30,52 @@ impl PeckBoard {
             Error::ChipError {source: e,
                 chip: ChipNumber::Chip4}
         )?;
-        let keys = PeckKeys::new(&mut chip)?;
+
+        let mut chip2 = Chip::new(&Self::INTERRUPT_CHIP)
+            .map_err(|e:GpioError| Error::ChipError {source: e, chip: ChipNumber::Chip2})
+            .unwrap();
+
+        let line22 = chip2.get_line(22)
+            .map_err(|e:GpioError| Error::LineGetError {source:e, line: 22}).unwrap();
+        let mut events22 = AsyncLineEventHandle::new(line22.events(
+            LineRequestFlags::INPUT,
+            EventRequestFlags::BOTH_EDGES, //Setting flags to FALLING_EDGE does not exclude RISING events??
+            "async peckboard interrupt",
+        ).unwrap()).unwrap();
+        let line23 = chip2.get_line(23)
+            .map_err(|e:GpioError| Error::LineGetError {source:e, line: 23}).unwrap();
+        let mut events23 = AsyncLineEventHandle::new(line23.events(
+            LineRequestFlags::INPUT,
+            EventRequestFlags::BOTH_EDGES, //Setting flags to FALLING_EDGE does not exclude RISING events??
+            "async peckboard interrupt",
+        ).unwrap()).unwrap();
+        let line24 = chip2.get_line(24)
+            .map_err(|e:GpioError| Error::LineGetError {source:e, line: 24}).unwrap();
+        let mut events24 = AsyncLineEventHandle::new(line24.events(
+            LineRequestFlags::INPUT,
+            EventRequestFlags::BOTH_EDGES, //Setting flags to FALLING_EDGE does not exclude RISING events??
+            "async peckboard interrupt",
+        ).unwrap()).unwrap();
+        let line25 = chip2.get_line(25)
+            .map_err(|e:GpioError| Error::LineGetError {source:e, line: 25}).unwrap();
+        let mut events25 = AsyncLineEventHandle::new(line25.events(
+            LineRequestFlags::INPUT,
+            EventRequestFlags::BOTH_EDGES, //Setting flags to FALLING_EDGE does not exclude RISING events??
+            "async peckboard interrupt",
+        ).unwrap()).unwrap();
+
+        let interrupt_line: u32;
+        info!("Initiating peckboard! Try pecking one of the keys.");
+        tokio::select! {
+            _ = events22.next() => {info!("Interrupted on line 22"); interrupt_line=22}
+            _ = events23.next() => {info!("Interrupted on line 23"); interrupt_line=23}
+            _ = events24.next() => {info!("Interrupted on line 24"); interrupt_line=24}
+            _ = events25.next() => {info!("Interrupted on line 25"); interrupt_line=25}
+        }
+
+        let keys = PeckKeys::new(&mut chip, interrupt_line)?;
         let leds = PeckLEDs::new(&mut chip)?;
+
         Ok(PeckBoard{
             leds,
             keys
@@ -43,8 +86,8 @@ impl PeckBoard {
             let mut chip2 = Chip::new(&Self::INTERRUPT_CHIP)
                 .map_err(|e:GpioError| Error::ChipError {source: e, chip: ChipNumber::Chip2})
                 .unwrap();
-            let interrupt_line = chip2.get_line(Self::INTERRUPT_LINE)
-                .map_err(|e:GpioError| Error::LineGetError {source:e, line: Self::INTERRUPT_LINE}).unwrap();
+            let interrupt_line = chip2.get_line(self.keys.interrupt_line)
+                .map_err(|e:GpioError| Error::LineGetError {source:e, line: self.keys.interrupt_line}).unwrap();
             let mut events = AsyncLineEventHandle::new(interrupt_line.events(
                 LineRequestFlags::INPUT,
                 EventRequestFlags::BOTH_EDGES, //Setting flags to FALLING_EDGE does not exclude RISING events??
@@ -135,7 +178,7 @@ impl PeckLEDs {
 }
 impl PeckKeys {
     const IR: [u32; 3] = [9,10,11];
-    pub fn new(chip: &mut Chip) -> Result<Self, Error> {
+    pub fn new(chip: &mut Chip, interrupt_line: u32) -> Result<Self, Error> {
         let _ir_handles: Vec<LineHandle> = Self::IR.iter()
             .map(|&offset| {
                 chip.get_line(offset).unwrap()
@@ -143,6 +186,7 @@ impl PeckKeys {
                     .unwrap()
             }).collect();
         Ok(PeckKeys{
+            interrupt_line
         })
     }
 }
@@ -178,9 +222,7 @@ impl LedState {
 }
 #[derive(Debug)]
 pub enum ChipNumber {
-    Chip1,
     Chip2,
-    Chip3,
     Chip4,
 }
 
@@ -193,11 +235,6 @@ pub enum Error {
     },
     #[error("Failed to get line")]
     LineGetError {
-        source: GpioError,
-        line: u32,
-    },
-    #[error("Failed to request line")]
-    LineReqError {
         source: GpioError,
         line: u32,
     },

@@ -11,9 +11,11 @@ use std::{thread,
                  atomic::{AtomicU8, Ordering
                  }}
 };
-use futures::{pin_mut, Stream, StreamExt};
-use log::{info, trace, warn};
-//use std::fs::File;
+use futures::{StreamExt};
+use log::{info,warn};
+use std::path::Path;
+use std::fs;
+
 
 struct LinesValue([u8; 2]);
 pub struct StepperMotorApparatus {
@@ -32,7 +34,7 @@ impl StepperMotor {
     const MOTOR3_OFFSETS: [u32;2] = [19,21];
     const ALL_OFF: LinesValue = LinesValue([0,0]);
     const NUM_HALF_STEPS: usize = 8;
-    const DT: u64 = 200;
+    const DT: u64 = 2000;
 
     const HALF_STEPS: [(LinesValue, LinesValue); 8] = [
         (LinesValue([0,1]),LinesValue([1,0])),
@@ -49,6 +51,21 @@ impl StepperMotor {
 
         let state = Arc::new(AtomicU8::new(0));
         let state_clone = Arc::clone(&state);
+
+        let chip_address: &str = if Path::new("/sys/class/pwm/pwmchip5").exists() { "pwmchip5" }
+        else { "pwmchip0" };
+        for pwm_address in ["0", "1"] {
+            if !Path::new(&format!("/sys/class/pwm/{}/pwm{}", chip_address, pwm_address)).exists() {
+                let export_loc = format!("/sys/class/pwm/{}/export", chip_address);
+                fs::write(export_loc.clone(), pwm_address).unwrap()
+            }
+            let configs = vec!["period", "10000", "duty_cycle", "6500", "enable", "1"];
+            for pair in configs.chunks(2) {
+                let write_loc = format!("/sys/class/pwm/{}/pwm{}/{}",
+                                        chip_address, pwm_address, pair[0]);
+                fs::write(write_loc.clone(), pair[1]).unwrap()
+            }
+        }
 
         let motor_1_handle = chip1
             .get_lines(&Self::MOTOR1_OFFSETS)
@@ -103,7 +120,7 @@ impl StepperMotor {
                     },
                     _ => {warn!("Invalid state read"); continue}
                 };
-                thread::sleep(Duration::from_millis(Self::DT));
+                thread::sleep(Duration::from_micros(Self::DT));
             }
         });
 
@@ -111,13 +128,12 @@ impl StepperMotor {
             state
         })
     }
-    pub fn set_state(&mut self, state: State) -> Result<(), Error> {
+    pub fn set_state(&mut self, state: State) {
         match state {
             State::Forward => {self.state.store(1, Ordering::Relaxed);}
             State::Backward => {self.state.store(2, Ordering::Relaxed);}
             State::Stop => {self.state.store(0, Ordering::Relaxed);}
         }
-        Ok(())
     }
 }
 impl Switch {
@@ -174,21 +190,21 @@ impl StepperMotorApparatus {
 
                         match event.unwrap().unwrap().event_type() {
                             EventType::RisingEdge => {
-                                println!("Switch 14 de-pressed");
-                                &self.stepper_motor.set_state(State::Stop);}
+                                info!("Switch 14 de-pressed");
+                                self.stepper_motor.set_state(State::Stop);}
                             EventType::FallingEdge => {
-                                println!("Switch 14 pressed");
-                                &self.stepper_motor.set_state(State::Forward);}
+                                info!("Switch 14 pressed");
+                                self.stepper_motor.set_state(State::Forward);}
                         }
                     }
                     event = &mut self.switch.switch_line_15.next() => {
                         match event.unwrap().unwrap().event_type() {
                             EventType::RisingEdge => {
-                                println!("Switch 15 de-pressed");
-                                &self.stepper_motor.set_state(State::Stop);}
+                                info!("Switch 15 de-pressed");
+                                self.stepper_motor.set_state(State::Stop);}
                             EventType::FallingEdge => {
-                                println!("Switch 15 pressed");
-                                &self.stepper_motor.set_state(State::Backward);}
+                                info!("Switch 15 pressed");
+                                self.stepper_motor.set_state(State::Backward);}
                         }
                     }
                 }
@@ -225,11 +241,6 @@ pub enum Error {
         source: GpioError,
         line: u32,
     },
-    #[error("Failed to request line")]
-    LineReqError {
-        source: GpioError,
-        line: u32,
-    },
     #[error("Failed to request event handle for line")]
     LineReqEvtError {
         source: GpioError,
@@ -255,9 +266,4 @@ pub enum Error {
         source: GpioError,
         line: u32,
     },
-    #[error("Failed to monitor switch lines")]
-    SwitchMonitorError {
-        source: GpioError,
-        lines: &'static [u32; 2],
-    }
 }
