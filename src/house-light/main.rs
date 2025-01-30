@@ -46,7 +46,7 @@ fn main() {
             let altitude = calc_altitude(args.dawn, args.dusk);
             let brightness = calc_brightness(altitude, 255);
             if write_mode {
-                let duty_cycle = 500000 * (1 - brightness as u32 / 255);
+                let duty_cycle: u32 = (500000.0 * (1.0 - (brightness as f64 / 255.0))) as u32;
                 info!("Writing {:?} to file {:?}", duty_cycle, write_loc);
                 fs::write(path.clone(), duty_cycle.to_string()).expect("Unable to write value to file");
             } else {
@@ -56,7 +56,7 @@ fn main() {
         } else {
             let brightness: u8 = buffer.trim().parse().expect("Input not an integer.");
             if write_mode {
-                let duty_cycle: u32 = (500000.0 * (1.0 - brightness as f64 / 255.0)) as u32;
+                let duty_cycle: u32 = (500000.0 * (1.0 - (brightness as f64 / 255.0))) as u32;
                 info!("Writing {:?} to file {:?}", duty_cycle, write_loc);
                 fs::write(path.clone(), duty_cycle.to_string()).expect("Unable to write value to file");
             } else {
