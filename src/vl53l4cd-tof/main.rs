@@ -1,7 +1,6 @@
 use vl53l4cd::Vl53l4cd;
-use linux_embedded_hal_async as hal;
 use i2cdev::linux::LinuxI2CBus;
-use hal::{delay, i2c};
+use linux_embedded_hal_async::{delay, i2c};
 use argh::{self, FromArgs};
 use simple_logger::SimpleLogger;
 use log::info;
